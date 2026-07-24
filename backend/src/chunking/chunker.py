@@ -2,7 +2,7 @@ from .config import CHUNK_NODE_TYPES, CLASS_NODE_TYPES
 from .metadata import build_metadata
 from .parser_factory import ParserFactory
 from .models import Chunk
-
+from .hash_chunk import dedup_chunks
 
 class ASTChunker:
     def __init__(self):
@@ -75,7 +75,7 @@ class ASTChunker:
 
         visit(tree.root_node)
 
-        chunks.extend(
+        all_chunks = chunks.extend(
             self.extract_module_level(
                 tree.root_node,
                 source,
@@ -85,7 +85,9 @@ class ASTChunker:
             )
         )
 
-        return chunks
+        unique_chunks = dedup_chunks(all_chunks)
+
+        return unique_chunks
 
     def extract_module_level(
         self,
