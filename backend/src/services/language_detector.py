@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from constants.langauges import (
+from src.constants.langauges import (
     EXTENSION_MAP,
     Language,
     SHEBANG_MAP,

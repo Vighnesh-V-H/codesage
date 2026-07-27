@@ -1,8 +1,8 @@
 from pathlib import Path
 import subprocess
 import shutil
-from utils.repo import get_repo_id
-from errors.repo_clone_errors import InvalidRepositoryError ,PrivateRepositoryError ,RepoCloneError
+from src.utils.repo import get_repo_id
+from src.errors.repo_clone_errors import InvalidRepositoryError, PrivateRepositoryError, RepoCloneError
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 TMP_DIR = BACKEND_ROOT / "tmp"

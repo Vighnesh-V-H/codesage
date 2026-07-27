@@ -1,7 +1,7 @@
 from pathlib import Path
 import os
-from constants.file_extensions import SOURCE_EXTENSIONS, IGNORE_DIRS, IGNORE_EXTENSIONS ,IGNORE_FILES
-from utils.repo import is_binary
+from src.constants.file_extensions import SOURCE_EXTENSIONS, IGNORE_DIRS, IGNORE_EXTENSIONS, IGNORE_FILES
+from src.utils.repo import is_binary
 
 MAX_FILE_SIZE = 1_000_000  
 

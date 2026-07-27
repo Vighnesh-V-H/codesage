@@ -1,7 +1,134 @@
-from src.chunking.config import CHUNK_NODE_TYPES, CLASS_NODE_TYPES
-from src.chunking.metadata import build_metadata
-from src.chunking.parser_factory import ParserFactory
-from src.chunking.models import Chunk
+# %%
+CHUNK_NODE_TYPES = {
+    "python": {
+        "class_definition",
+        "function_definition",
+    },
+    "javascript": {
+        "class_declaration",
+        "function_declaration",
+        "method_definition",
+        "generator_function_declaration",
+    },
+    "typescript": {
+        "class_declaration",
+        "function_declaration",
+        "method_definition",
+        "generator_function_declaration",
+        "interface_declaration",
+    },
+    "java": {
+        "class_declaration",
+        "interface_declaration",
+        "enum_declaration",
+        "method_declaration",
+        "constructor_declaration",
+    },
+    "go": {
+        "function_declaration",
+        "method_declaration",
+        "type_declaration",
+    },
+}
+
+CLASS_NODE_TYPES = {
+    "python": {"class_definition"},
+    "javascript": {"class_declaration"},
+    "typescript": {"class_declaration"},
+    "java": {
+        "class_declaration",
+        "interface_declaration",
+        "enum_declaration",
+    },
+    "go": {"type_declaration"},
+}
+
+# %%
+from dataclasses import dataclass
+from typing import Any
+
+
+@dataclass(slots=True)
+class Chunk:
+    text: str
+    metadata: dict[str, Any]
+
+# %%
+from tree_sitter import Language, Parser
+
+import tree_sitter_python
+import tree_sitter_javascript
+import tree_sitter_typescript
+import tree_sitter_java
+import tree_sitter_go
+
+
+LANGUAGES = {
+    "python": Language(tree_sitter_python.language()),
+    "javascript": Language(tree_sitter_javascript.language()),
+    "typescript": Language(tree_sitter_typescript.language_typescript()),
+    "java": Language(tree_sitter_java.language()),
+    "go": Language(tree_sitter_go.language()),
+}
+
+
+class ParserFactory:
+    def __init__(self):
+        self._cache = {}
+
+    def get(self, language: str) -> Parser:
+        if language not in LANGUAGES:
+            raise ValueError(f"Unsupported language: {language}")
+
+        if language not in self._cache:
+            self._cache[language] = Parser(LANGUAGES[language])
+
+        return self._cache[language]
+
+# %%
+import hashlib
+
+
+def build_metadata(
+    *,
+    file_path,
+    language,
+    node,
+    symbol,
+    parent,
+    node_type,
+    text,
+):
+    return {
+        "file_path": file_path,
+        "language": language,
+        "symbol": symbol,
+        "parent": parent,
+        "node_type": node_type,
+        "start_line": node.start_point[0] + 1,
+        "end_line": node.end_point[0] + 1,
+        "start_byte": node.start_byte,
+        "end_byte": node.end_byte,
+        "hash": hashlib.sha256(text.encode()).hexdigest(),
+    }
+
+# %%
+import hashlib
+
+def normalize_for_hash(text: str) -> str:
+    return " ".join(text.split())
+
+def dedup_stream(chunks_iter):
+    seen = set()
+    for c in chunks_iter:
+        h = hashlib.sha256(normalize_for_hash(c.text).encode("utf8")).hexdigest()
+        if h in seen:
+            continue
+        seen.add(h)
+        c.metadata["content_hash"] = h
+        yield c
+
+# %%
 
 class ASTChunker:
     def __init__(self):
@@ -99,3 +226,8 @@ class ASTChunker:
                 )
 
         return chunks
+
+# %%
+
+
+
