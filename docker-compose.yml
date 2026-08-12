@@ -32,7 +32,7 @@ services:
       - qdrant
       - redis
 
-  celery-worker:
+  celery:
     build:
       context: ./backend
       dockerfile: Dockerfile
