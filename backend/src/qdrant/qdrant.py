@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from collections.abc import Iterable
 
 from qdrant_client import QdrantClient
@@ -88,7 +89,6 @@ class QdrantService:
                 **metadata,
             }
 
-            # Verify payload can be serialized before sending to Qdrant.
             try:
                 json.dumps(payload)
             except TypeError:
@@ -98,8 +98,12 @@ class QdrantService:
                 )
                 raise
 
+            point_id = self._coerce_point_id(
+                metadata.get("hash") or metadata.get("content_hash"),
+                idx,
+            )
             point = PointStruct(
-                id=metadata.get("hash", idx),
+                id=point_id,
                 vector=embedding,
                 payload=payload,
             )
@@ -129,6 +133,22 @@ class QdrantService:
             )
 
         return points
+
+    @staticmethod
+    def _coerce_point_id(raw_id, fallback_idx):
+        if isinstance(raw_id, int) and 0 <= raw_id < 2**64:
+            return raw_id
+
+        if isinstance(raw_id, str):
+            normalized = raw_id.strip()
+            if not normalized:
+                return fallback_idx
+            try:
+                return str(uuid.UUID(normalized))
+            except ValueError:
+                return str(uuid.uuid5(uuid.NAMESPACE_DNS, normalized))
+
+        return fallback_idx
 
     def upsert_points(
         self,
@@ -199,11 +219,19 @@ class QdrantService:
                 sorted(first_point.payload.keys()),
             )
 
-            self.client.upsert(
-                collection_name=collection_name,
-                points=points,
-                wait=True,
-            )
+            batches = self._split_upsert_batches(points)
+            for batch_index, batch in enumerate(batches, start=1):
+                logger.info(
+                    "Upserting Qdrant batch %d/%d (%d points).",
+                    batch_index,
+                    len(batches),
+                    len(batch),
+                )
+                self.client.upsert(
+                    collection_name=collection_name,
+                    points=batch,
+                    wait=True,
+                )
 
             logger.info(
                 "Successfully upserted %d points into '%s'.",
@@ -233,6 +261,38 @@ class QdrantService:
                 "Unexpected error during Qdrant upsert."
             )
             raise
+
+    @staticmethod
+    def _point_payload_size(point: PointStruct) -> int:
+        payload = point.payload or {}
+        if hasattr(point, "model_dump"):
+            data = point.model_dump(exclude_none=True, mode="json")
+        elif hasattr(point, "dict"):
+            data = point.dict(exclude_none=True)
+        else:
+            data = {"id": point.id, "vector": point.vector, "payload": payload}
+        return len(json.dumps({"id": point.id, "vector": point.vector, "payload": payload}, separators=(",", ":")).encode("utf-8"))
+
+    @classmethod
+    def _split_upsert_batches(cls, points: list[PointStruct], max_payload_bytes: int = 24 * 1024 * 1024) -> list[list[PointStruct]]:
+        batches: list[list[PointStruct]] = []
+        current: list[PointStruct] = []
+        current_size = 0
+
+        for point in points:
+            point_size = cls._point_payload_size(point)
+            if current and current_size + point_size > max_payload_bytes:
+                batches.append(current)
+                current = []
+                current_size = 0
+
+            current.append(point)
+            current_size += point_size
+
+        if current:
+            batches.append(current)
+
+        return batches
 
     def query_points(
         self,

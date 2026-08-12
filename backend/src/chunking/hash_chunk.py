@@ -1,7 +1,9 @@
 import hashlib
 
+
 def normalize_for_hash(text: str) -> str:
     return " ".join(text.split())
+
 
 def dedup_stream(chunks_iter):
     seen = set()
@@ -11,4 +13,5 @@ def dedup_stream(chunks_iter):
             continue
         seen.add(h)
         c.metadata["content_hash"] = h
+        c.metadata["hash"] = h
         yield c
