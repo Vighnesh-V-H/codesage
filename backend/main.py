@@ -3,6 +3,7 @@ from src.utils.repo import get_repo_id
 from src.services.vectore_store import VectorStore
 from src.qdrant.qdrant import QdrantService
 from src.retrieval.rag import RAGPipeline
+from src.generation.answerer import AnswerGenerator
 from src.embed.embedder import EmbeddingService
 from src.services.clone_repo import RepoCloneService
 from src.core.config import config
@@ -34,6 +35,7 @@ vector_store = VectorStore(
     qdrant_service=qdrant_service,
 )
 rag_pipeline = RAGPipeline(vector_store)
+answer_generator = AnswerGenerator(client=openai_client)
 clone_service = RepoCloneService()
 
 
@@ -64,6 +66,12 @@ class RetrieveRequest(BaseModel):
 
 
 class RAGRequest(BaseModel):
+    repo_url: str
+    query: str
+    top_k: int = 5
+
+
+class AnswerRequest(BaseModel):
     repo_url: str
     query: str
     top_k: int = 5
@@ -148,3 +156,33 @@ def rag(req: RAGRequest):
         query=req.query,
         top_k=req.top_k,
     )
+
+
+@app.post("/answer")
+def answer(req: AnswerRequest):
+    repo_id = get_repo_id(req.repo_url)
+    collection_name = repo_id
+
+    if not qdrant_client.collection_exists(collection_name):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Collection '{collection_name}' not found. Embed the repo first.",
+        )
+
+    rag_result = rag_pipeline.run(
+        collection_name=collection_name,
+        query=req.query,
+        top_k=req.top_k,
+    )
+    answer_text = answer_generator.generate(
+        query=req.query,
+        context=rag_result["context"],
+    )
+
+    return {
+        "query": req.query,
+        "answer": answer_text,
+        "collection_name": collection_name,
+        "context": rag_result["context"],
+        "results": rag_result["results"],
+    }
