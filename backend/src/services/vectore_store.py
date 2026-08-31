@@ -170,6 +170,7 @@ class VectorStore:
         similarity_scores: list[float] = []
         lexical_scores: list[float] = []
         structural_scores: list[float] = []
+        metadata_scores: list[float] = []
         combined_scores: list[float] = []
 
         for candidate in ranked[:top_k]:
@@ -179,6 +180,7 @@ class VectorStore:
             similarity_scores.append(candidate.semantic_score)
             lexical_scores.append(candidate.lexical_score)
             structural_scores.append(candidate.structural_score)
+            metadata_scores.append(candidate.metadata_score)
             combined_scores.append(candidate.combined_score)
 
         logger.info(
@@ -193,5 +195,6 @@ class VectorStore:
             "similarity_scores": similarity_scores,
             "lexical_scores": lexical_scores,
             "structural_scores": structural_scores,
+            "metadata_scores": metadata_scores,
             "combined_scores": combined_scores,
         }
