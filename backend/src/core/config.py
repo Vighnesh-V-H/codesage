@@ -8,8 +8,8 @@ class Config(BaseSettings):
     OPENAI_API_KEY: str | None = None
     AGENTIC_MODEL: str = "z-ai/glm-5.2"
     GEMINI_API_KEY: str | None = None
-    GROQ_API_KEY:str
-    EMBEDDING_MODEL:str = "nvidia/llama-nemotron-embed-1b-v2"
+    GROQ_API_KEY: str | None = None
+    EMBEDDING_MODEL: str = "nvidia/llama-nemotron-embed-1b-v2"
     QDRANT_URL: str = "http://qdrant:6333"
     AI_API_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
     CELERY_BROKER_URL: str = "redis://redis:6379/0"

@@ -2,6 +2,7 @@ from src.errors.repo_clone_errors import RepoCloneError
 from src.utils.repo import get_repo_id
 from src.services.vectore_store import VectorStore
 from src.qdrant.qdrant import QdrantService
+from src.retrieval.rag import RAGPipeline
 from src.embed.embedder import EmbeddingService
 from src.services.clone_repo import RepoCloneService
 from src.core.config import config
@@ -32,6 +33,7 @@ vector_store = VectorStore(
     embedding_service=embedding_service,
     qdrant_service=qdrant_service,
 )
+rag_pipeline = RAGPipeline(vector_store)
 clone_service = RepoCloneService()
 
 
@@ -56,6 +58,12 @@ class EmbedResponse(BaseModel):
 
 
 class RetrieveRequest(BaseModel):
+    repo_url: str
+    query: str
+    top_k: int = 5
+
+
+class RAGRequest(BaseModel):
     repo_url: str
     query: str
     top_k: int = 5
@@ -122,3 +130,21 @@ def retrieve(req: RetrieveRequest):
     )
 
     return results
+
+
+@app.post("/rag")
+def rag(req: RAGRequest):
+    repo_id = get_repo_id(req.repo_url)
+    collection_name = repo_id
+
+    if not qdrant_client.collection_exists(collection_name):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Collection '{collection_name}' not found. Embed the repo first.",
+        )
+
+    return rag_pipeline.run(
+        collection_name=collection_name,
+        query=req.query,
+        top_k=req.top_k,
+    )
