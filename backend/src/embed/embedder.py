@@ -4,7 +4,7 @@ from typing import Literal
 
 from openai import OpenAI
 
-from src.chunking.limits import MAX_CHUNK_TOKENS, split_text_by_tokens, token_count
+from src.chunking.limits import MAX_CHUNK_TOKENS, token_count
 from src.chunking.models import Chunk
 from src.core.config import config
 
@@ -40,14 +40,15 @@ class EmbeddingService:
 
     def _normalize_texts(self, texts: list[str]) -> list[str]:
         normalized: list[str] = []
-        for text in texts:
+        for index, text in enumerate(texts):
             if not text or not text.strip():
-                continue
-            if token_count(text) <= MAX_CHUNK_TOKENS:
-                normalized.append(text)
-                continue
-            normalized.extend(split_text_by_tokens(
-                text, max_tokens=MAX_CHUNK_TOKENS))
+                raise ValueError(f"Embedding input at index {index} is empty")
+            if token_count(text) > MAX_CHUNK_TOKENS:
+                raise ValueError(
+                    f"Embedding input at index {index} exceeds "
+                    f"the {MAX_CHUNK_TOKENS}-token limit; split it before embedding"
+                )
+            normalized.append(text)
         return normalized
 
     def _request_embeddings_batched(
@@ -78,21 +79,6 @@ class EmbeddingService:
 
         for text in texts:
             t = token_count(text)
-
-            if t > MAX_CHUNK_TOKENS:
-                for piece in split_text_by_tokens(text, max_tokens=MAX_CHUNK_TOKENS):
-                    if not current:
-                        current = [piece]
-                        current_tokens = token_count(piece)
-                        continue
-                    if current_tokens + token_count(piece) > BATCH_TOKEN_BUDGET:
-                        batches.append(current)
-                        current = [piece]
-                        current_tokens = token_count(piece)
-                        continue
-                    current.append(piece)
-                    current_tokens += token_count(piece)
-                continue
 
             exceeds_token_budget = current and (
                 current_tokens + t > BATCH_TOKEN_BUDGET)
