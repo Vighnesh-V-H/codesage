@@ -169,10 +169,9 @@ class VectorStore:
             return
 
         if embedding_count != chunk_count:
-            logger.warning(
-                "Chunk count (%d) differs from embedding count (%d).",
-                chunk_count,
-                embedding_count,
+            raise ValueError(
+                f"Embedding count ({embedding_count}) does not match "
+                f"chunk count ({chunk_count}); refusing to misalign stored data"
             )
 
         vector_dimension = len(embeddings[0])
