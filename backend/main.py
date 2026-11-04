@@ -8,7 +8,7 @@ from src.core.config import config
 from tasks import embed_repo_task
 from qdrant_client import QdrantClient
 from openai import OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException
 import sys
 from pathlib import Path
@@ -46,7 +46,7 @@ class CloneResponse(BaseModel):
 
 
 class EmbedRequest(BaseModel):
-    repo_url: str
+    repo_url: str = Field(min_length=1, max_length=2048)
 
 
 class EmbedResponse(BaseModel):
