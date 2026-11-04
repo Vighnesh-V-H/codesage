@@ -50,7 +50,9 @@ def embed_repo_task(self, repo_url: str):
     """Clone and index a repository, storing vectors under its canonical URL ID."""
     vector_store, chunker = _get_services()
 
-    repo_path = RepoCloneService().clone(repo_url)
+    repo_path = RepoCloneService().clone(repo_url).resolve()
+    if not repo_path.is_dir():
+        raise ValueError(f"Cloned repository path is not a directory: {repo_path}")
     repo_id = get_repo_id(repo_url)
 
     all_chunks = []
