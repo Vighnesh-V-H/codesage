@@ -40,6 +40,16 @@ class QdrantService:
                 "Collection '%s' already exists.",
                 collection_name,
             )
+            if vector_size is not None:
+                collection = self.client.get_collection(collection_name)
+                configured_vectors = collection.config.params.vectors
+                existing_size = getattr(configured_vectors, "size", None)
+                if existing_size is not None and existing_size != vector_size:
+                    raise ValueError(
+                        f"Collection '{collection_name}' has vector size "
+                        f"{existing_size}, but the current embedding size is "
+                        f"{vector_size}. Use a versioned collection and re-embed."
+                    )
             return
 
         if vector_size is None:
@@ -197,11 +207,10 @@ class QdrantService:
                 )
 
                 if expected_dimension != len(first_point.vector):
-                    logger.error(
-                        "Vector dimension mismatch. "
-                        "Collection=%s Embedding=%d",
-                        expected_dimension,
-                        len(first_point.vector),
+                    raise ValueError(
+                        f"Vector dimension mismatch for collection "
+                        f"'{collection_name}': expected {expected_dimension}, "
+                        f"received {len(first_point.vector)}"
                     )
             except AttributeError:
                 logger.warning(
