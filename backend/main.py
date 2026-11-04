@@ -46,7 +46,7 @@ class CloneResponse(BaseModel):
 
 
 class EmbedRequest(BaseModel):
-    folder_path: str
+    repo_url: str
 
 
 class EmbedResponse(BaseModel):
@@ -78,9 +78,8 @@ def clone_repo(req: CloneRequest):
 
 @app.post("/embed")
 def embed_repo(req: EmbedRequest):
-    folder = Path(req.folder_path)
     try:
-        task = embed_repo_task.delay(req.folder_path)
+        task = embed_repo_task.delay(req.repo_url)
     except OperationalError as e:
         raise HTTPException(
             status_code=503, detail=f"Task queue unavailable: {e}")
