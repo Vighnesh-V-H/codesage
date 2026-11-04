@@ -1,3 +1,4 @@
+import logging
 import re
 
 from transformers import AutoTokenizer
@@ -9,6 +10,9 @@ try:
     _tokenizer = AutoTokenizer.from_pretrained(EMBED_MODEL_ID)
 except Exception:
     _tokenizer = None
+    logging.getLogger(__name__).warning(
+        "Model tokenizer unavailable; using approximate character-based token limits."
+    )
 
 _FALLBACK_CHARS_PER_TOKEN = 3.2
 
@@ -29,13 +33,25 @@ def _split_overlong_line(line: str, max_tokens: int) -> list[str]:
     current_tokens = 0
 
     for word in words:
-        word_tokens = max(1, token_count(word))
-        if current and current_tokens + word_tokens > max_tokens:
-            chunks.append(" ".join(current))
-            current = []
-            current_tokens = 0
-        current.append(word)
-        current_tokens += word_tokens
+        pieces = [word]
+        while any(token_count(piece) > max_tokens for piece in pieces):
+            next_pieces: list[str] = []
+            for piece in pieces:
+                if token_count(piece) <= max_tokens:
+                    next_pieces.append(piece)
+                    continue
+                midpoint = max(1, len(piece) // 2)
+                next_pieces.extend((piece[:midpoint], piece[midpoint:]))
+            pieces = next_pieces
+
+        for piece in pieces:
+            word_tokens = max(1, token_count(piece))
+            if current and current_tokens + word_tokens > max_tokens:
+                chunks.append(" ".join(current))
+                current = []
+                current_tokens = 0
+            current.append(piece)
+            current_tokens += word_tokens
 
     if current:
         chunks.append(" ".join(current))
