@@ -11,6 +11,7 @@ from src.chunking.hash_chunk import dedup_stream
 from src.chunking.chunker import ASTChunker
 from src.services.language_detector import detect_language
 from src.services.file_walker import walk_repository
+from src.services.clone_repo import RepoCloneService
 
 from qdrant_client import QdrantClient
 from openai import OpenAI
@@ -45,12 +46,12 @@ def _get_services():
 
 
 @celery_app.task(bind=True)
-def embed_repo_task(self, folder_path: str):
-    """Clone-free embedding: chunks, deduplicates, and stores vectors for a local folder."""
+def embed_repo_task(self, repo_url: str):
+    """Clone and index a repository, storing vectors under its canonical URL ID."""
     vector_store, chunker = _get_services()
 
-    repo_path = Path(folder_path)
-    repo_id = get_repo_id(folder_path)
+    repo_path = RepoCloneService().clone(repo_url)
+    repo_id = get_repo_id(repo_url)
 
     all_chunks = []
     for file_path in walk_repository(repo_path):
