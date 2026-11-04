@@ -36,7 +36,7 @@ clone_service = RepoCloneService()
 
 
 class CloneRequest(BaseModel):
-    repo_url: str
+    repo_url: str = Field(min_length=1, max_length=2048)
 
 
 class CloneResponse(BaseModel):
@@ -56,9 +56,9 @@ class EmbedResponse(BaseModel):
 
 
 class RetrieveRequest(BaseModel):
-    repo_url: str
-    query: str
-    top_k: int = 5
+    repo_url: str = Field(min_length=1, max_length=2048)
+    query: str = Field(min_length=1, max_length=10_000)
+    top_k: int = Field(default=5, ge=1, le=100)
 
 
 @app.post("/clone", response_model=CloneResponse)
