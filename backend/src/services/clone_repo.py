@@ -17,7 +17,32 @@ class RepoCloneService:
         repo_path = self.workspace / repo_id
 
         if repo_path.exists():
-            return repo_path
+            if not (repo_path / ".git").is_dir():
+                raise RepoCloneError(
+                    f"Clone destination exists but is not a Git repository: {repo_path}"
+                )
+            try:
+                origin = subprocess.run(
+                    ["git", "-C", str(repo_path), "remote", "get-url", "origin"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+                if origin.rstrip("/").removesuffix(".git").lower() != repo_url.strip().rstrip("/").removesuffix(".git").lower():
+                    raise RepoCloneError(
+                        "Clone destination is associated with a different repository URL."
+                    )
+                subprocess.run(
+                    ["git", "-C", str(repo_path), "pull", "--ff-only"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                return repo_path
+            except subprocess.CalledProcessError as e:
+                raise RepoCloneError(
+                    f"Unable to refresh existing repository clone: {(e.stderr or '').strip()}"
+                ) from e
 
         try:
             subprocess.run(
