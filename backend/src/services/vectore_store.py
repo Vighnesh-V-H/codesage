@@ -97,6 +97,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from collections.abc import Iterable
 from typing import Any
 
@@ -111,6 +112,7 @@ from src.qdrant.qdrant import QdrantService
 logger = logging.getLogger(__name__)
 
 _RERANK_CANDIDATE_LIMIT = 50
+_LEXICAL_CACHE_TTL_SECONDS = 60
 _SCROLL_PAGE_SIZE = 1000
 _MAX_LEXICAL_DOCUMENTS = 50_000
 _RRF_K = 60
@@ -130,7 +132,7 @@ class VectorStore:
         self.embedding_service = embedding_service
         self.qdrant_service = qdrant_service
         self._reranker = reranker
-        self._lexical_corpus: dict[str, list[Any]] = {}
+        self._lexical_corpus: dict[str, tuple[float, list[Any], list[list[str]], BM25Okapi | None]] = {}
 
     def _get_reranker(self):
         if self._reranker is None:
@@ -286,8 +288,8 @@ class VectorStore:
             query_vector=query_embedding,
             top_k=candidate_limit,
         )
-        lexical_points = self._lexical_corpus.get(collection_name)
-        if lexical_points is None:
+        cached = self._lexical_corpus.get(collection_name)
+        if cached is None or time.monotonic() - cached[0] >= _LEXICAL_CACHE_TTL_SECONDS:
             lexical_points = []
             offset = None
             while len(lexical_points) < _MAX_LEXICAL_DOCUMENTS:
@@ -299,21 +301,39 @@ class VectorStore:
                 lexical_points.extend(point for point in page if (point.payload or {}).get("text"))
                 if offset is None or not page:
                     break
-            self._lexical_corpus[collection_name] = lexical_points
+            tokenized_documents = [_tokens(str((point.payload or {}).get("text", ""))) for point in lexical_points]
+            bm25 = BM25Okapi(tokenized_documents) if tokenized_documents else None
+            cached = (time.monotonic(), lexical_points, tokenized_documents, bm25)
+            self._lexical_corpus[collection_name] = cached
+        _, lexical_points, tokenized_documents, bm25 = cached
 
         lexical_ranked = []
-        if lexical_points:
-            bm25 = BM25Okapi([_tokens(str((p.payload or {}).get("text", ""))) for p in lexical_points])
-            lexical_scores = bm25.get_scores(_tokens(query))
-            lexical_ranked = sorted(zip(lexical_points, lexical_scores), key=lambda item: item[1], reverse=True)[:candidate_limit]
+        query_tokens = _tokens(query)
+        if bm25 is not None and query_tokens:
+            lexical_scores = bm25.get_scores(query_tokens)
+            query_terms = set(query_tokens)
+            lexical_ranked = sorted(
+                (
+                    (point, float(score))
+                    for index, (point, score) in enumerate(zip(lexical_points, lexical_scores))
+                    if query_terms.intersection(tokenized_documents[index])
+                ),
+                key=lambda item: item[1],
+                reverse=True,
+            )[:candidate_limit]
 
         fused: dict[Any, tuple[Any, float]] = {}
         for rank, point in enumerate(dense_results, start=1):
             fused[point.id] = (point, 1.0 / (_RRF_K + rank))
         for rank, (point, _) in enumerate(lexical_ranked, start=1):
-            previous = fused.get(point.id, (point, 0.0))[1]
-            fused[point.id] = (point, previous + 1.0 / (_RRF_K + rank))
-        candidates = sorted(fused.values(), key=lambda item: item[1], reverse=True)[:_RERANK_CANDIDATE_LIMIT]
+            # Prefer the dense ScoredPoint on overlap; Qdrant scroll returns Records
+            # without a similarity score, while both representations share the ID.
+            existing = fused.get(point.id)
+            if existing is None:
+                fused[point.id] = (point, 1.0 / (_RRF_K + rank))
+            else:
+                fused[point.id] = (existing[0], existing[1] + 1.0 / (_RRF_K + rank))
+        candidates = sorted(fused.values(), key=lambda item: item[1], reverse=True)[:max(top_k, _RERANK_CANDIDATE_LIMIT)]
         rerank_inputs = [[query, str((point.payload or {}).get("text", ""))] for point, _ in candidates]
         rerank_scores = self._get_reranker().predict(rerank_inputs) if rerank_inputs else []
         reranked = sorted(zip(candidates, rerank_scores), key=lambda item: float(item[1]), reverse=True)[:top_k]
@@ -339,7 +359,7 @@ class VectorStore:
                     if key != "text"
                 }
             )
-            similarity_scores.append(final_scores.get(result.id, float(result.score)))
+            similarity_scores.append(final_scores[result.id])
 
         logger.info(
             "Successfully processed %d retrieved results.",
