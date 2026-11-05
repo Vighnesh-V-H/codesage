@@ -303,6 +303,21 @@ class QdrantService:
 
         return batches
 
+    def scroll_points(
+        self,
+        collection_name: str,
+        limit: int = 1000,
+        offset=None,
+    ):
+        """Read payloads in bounded pages for lexical candidate generation."""
+        return self.client.scroll(
+            collection_name=collection_name,
+            limit=limit,
+            offset=offset,
+            with_payload=True,
+            with_vectors=False,
+        )
+
     def query_points(
         self,
         collection_name: str,

@@ -10,6 +10,7 @@ class Config(BaseSettings):
     GEMINI_API_KEY: str | None = None
     GROQ_API_KEY: str | None = None
     EMBEDDING_MODEL:str = "nvidia/llama-nemotron-embed-1b-v2"
+    RERANKER_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     QDRANT_URL: str = "http://qdrant:6333"
     AI_API_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
     CELERY_BROKER_URL: str = "redis://redis:6379/0"
